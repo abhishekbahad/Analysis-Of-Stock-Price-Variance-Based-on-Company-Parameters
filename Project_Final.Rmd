@@ -1,0 +1,476 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+Data_2018 = read.csv(file.choose())
+names(Data_2018)
+```
+
+```{r}
+library(dplyr)
+```
+Removing some irregfular columns from the dataset
+```{r}
+Data_2018 = slice(Data_2018[-52])
+```
+```{r}
+Data_2018 = slice(Data_2018[-16])
+```
+```{r}
+Data_2018 = slice(Data_2018[-91])
+```
+```{r}
+Data_2018 = slice(Data_2018[-106])
+```
+
+
+```{r}
+temp <- Data_2018
+```
+
+Removing Extreme values from the dataset through each column
+```{r}
+Data_2018 <- temp
+n <- length(Data_2018[])
+#n = 2
+for(i in 2:n) {
+  if(names(Data_2018[i]) == "Sector") {
+    next
+  }
+  quantiles <- quantile(Data_2018[,i], probs = c(0.001, 0.999), na.rm = FALSE)
+  IQR <- IQR(Data_2018[,i])
+  Lower <- quantiles[1] - 1.5*IQR
+  Upper <- quantiles[2] + 1.5*IQR
+  
+  #print(i)
+  #print(nrow(subset(Data_2018, Data_2018[,i] > Lower & Data_2018[,i] < Upper)))
+  Data_2018 <- slice(subset(Data_2018, Data_2018[,i] > Lower & Data_2018[,i] < Upper))
+}
+nrow(Data_2018)
+```
+
+Fit a linear regression model
+```{r}
+model_all = lm(X2019.PRICE.VAR.... ~ . - Stock.Code - Sector - X2019.PRICE.VAR...., data = Data_2018)
+summary(model_all)
+```
+
+```{r}
+plot(model_all)
+```
+
+Removing influential points from the model
+```{r}
+inf <- influence(model_all)
+inf$hat
+```
+
+```{r}
+n <- nrow(Data_2018)
+l <- length(Data_2018) - 4
+lev_threshold <- (2*l)/n
+lev_ctr <- 0
+for (i in n:1){
+  if(inf$hat[i] >= lev_threshold){
+    #print(i)
+    #print(inf$hat[i])
+    Data_2018 <- slice(Data_2018[-i,])
+    lev_ctr = lev_ctr + 1
+  }
+}
+```
+
+Number of influential points
+```{r}
+lev_ctr
+```
+
+```{r}
+model_all_1 = lm(X2019.PRICE.VAR.... ~ . - Stock.Code - Sector - X2019.PRICE.VAR...., data = Data_2018)
+summary(model_all_1)
+```
+
+Removing Outliers
+```{r}
+jack <- rstudent(model_all_1)
+jack[which.max(abs(jack))]
+```
+
+```{r}
+n <- nrow(Data_2018)
+l <- length(Data_2018) - 4
+out_threshold <- abs(qt(0.05/(n*2), n-l-1))
+out_ctr <- 0
+for (i in n:1){
+  if(abs(jack[i]) >= out_threshold){
+    #print(i)
+    #print(inf$hat[i])
+    Data_2018 <- slice(Data_2018[-i,])
+    out_ctr = out_ctr + 1
+  }
+}
+```
+
+Number of Outliers
+```{r}
+out_ctr
+```
+
+```{r}
+model_all_2 = lm(X2019.PRICE.VAR.... ~ . - Stock.Code - Sector - X2019.PRICE.VAR...., data = Data_2018)
+summary(model_all_2)
+```
+
+```{r}
+plot(model_all_2)
+```
+
+
+```{r}
+plot(predict(model_all_2), Data_2018$X2019.PRICE.VAR....)
+abline(0,1)
+```
+
+Broken Stick Regression (i.e. Splitting Data into 2 sets)
+```{r}
+Data_2018_0 <- slice(Data_2018[Data_2018$Class == 0,])
+```
+
+```{r}
+max(Data_2018_0["X2019.PRICE.VAR...."])
+```
+
+```{r}
+Data_2018_1 <- slice(Data_2018[Data_2018$Class == 1,])
+```
+
+```{r}
+min(Data_2018_1["X2019.PRICE.VAR...."])
+```
+
+```{r}
+model_all_A = lm(-X2019.PRICE.VAR.... ~ . - Stock.Code - Sector - X2019.PRICE.VAR.... - Class, data = Data_2018_0)
+summary(model_all_A)
+```
+
+```{r}
+plot(model_all_A)
+```
+
+```{r}
+model_all_B = lm(X2019.PRICE.VAR.... ~ . - Stock.Code - Sector - X2019.PRICE.VAR.... - Class, data = Data_2018_1)
+summary(model_all_B) 
+```
+
+```{r}
+plot(model_all_B)
+```
+
+Need to perform box-cox:-
+
+Removing rows with 0 output since we need positive values to perform box-cox
+```{r}
+which(Data_2018_1["X2019.PRICE.VAR...."] == 0)
+```
+
+```{r}
+Data_2018_1 <- slice(Data_2018_1[-c(583, 630, 757, 1462, 1585, 1732),])
+which(Data_2018_1["X2019.PRICE.VAR...."] == 0)
+```
+
+```{r}
+library(MASS)
+box_cox_A = boxcox(model_all_A)
+box_cox_B = boxcox(model_all_B)
+```
+
+```{r}
+lambda_A = box_cox_A$x[which.max(box_cox_A$y)]
+lambda_A
+lambda_B = box_cox_B$x[which.max(box_cox_B$y)]
+lambda_B
+```
+
+```{r}
+model_bxcx_0 = lm((((-X2019.PRICE.VAR....)^lambda_A)-1)/lambda_A ~ . - Stock.Code - Sector - X2019.PRICE.VAR.... - Class, data = Data_2018_0)
+summary(model_bxcx_0)
+```
+
+```{r}
+model_bxcx_1 = lm((((X2019.PRICE.VAR....)^lambda_B)-1)/lambda_B ~ . - Stock.Code - Sector - X2019.PRICE.VAR.... - Class, data = Data_2018_1)
+summary(model_bxcx_1)
+```
+
+```{r}
+plot(model_bxcx_0)
+```
+
+```{r}
+plot(model_bxcx_1)
+```
+
+```{r}
+plot(predict(model_bxcx_0),((-Data_2018_0$X2019.PRICE.VAR....)^lambda_A - 1)/lambda_A)
+abline(0,1)
+```
+
+```{r}
+plot(predict(model_bxcx_1),((Data_2018_1$X2019.PRICE.VAR....)^lambda_B - 1)/lambda_B)
+abline(0,1)
+```
+
+Backward Elimination using AIC
+```{r}
+step(model_bxcx_0, direction = "backward", scope = formula(model_bxcx_0), k = 2)
+```
+
+```{r}
+step(model_bxcx_1, direction = "backward", scope = formula(model_bxcx_1), k = 2)
+```
+
+
+```{r}
+model_selected_A = lm((((-X2019.PRICE.VAR....)^lambda_A) - 1)/lambda_A ~ 
+    Revenue + Cost.of.Revenue + SG.A.Expense + Interest.Expense + 
+        Income.Tax.Expense + Net.Income...Non.Controlling.int + 
+        EPS + EPS.Diluted + EBIT.Margin + Profit.Margin + EBITDA + 
+        Consolidated.Income + Net.Profit.Margin + Cash.and.cash.equivalents + 
+        Short.term.investments + Goodwill.and.Intangible.Assets + 
+        Total.non.current.assets + Payables + Short.term.debt + 
+        Total.current.liabilities + Long.term.debt + Total.non.current.liabilities + 
+        Total.shareholders.equity + Other.Assets + Other.Liabilities + 
+        Depreciation...Amortization + Operating.Cash.Flow + Capital.Expenditure + 
+        Investing.Cash.flow + Issuance..repayment..of.debt + 
+        Issuance..buybacks..of.shares + Dividend.payments + Financing.Cash.Flow + 
+        Net.cash.flow...Change.in.cash + Free.Cash.Flow + Net.Cash.Marketcap + 
+        ebitperRevenue + grossProfitMargin + netProfitMargin + 
+        returnOnEquity + payablesTurnover + inventoryTurnover + 
+        fixedAssetTurnover + assetTurnover + debtRatio + longtermDebtToCapitalization + 
+        interestCoverage + operatingCashFlowPerShare + freeCashFlowPerShare + 
+        payoutRatio + operatingCashFlowSalesRatio + freeCashFlowOperatingCashFlowRatio + 
+        capitalExpenditureCoverageRatios + dividendpaidAndCapexCoverageRatios + 
+        Revenue.per.Share + Net.Income.per.Share + Market.Cap + 
+        Enterprise.Value + Free.Cash.Flow.Yield + Income.Quality + 
+        R.D.to.Revenue + Capex.to.Operating.Cash.Flow + Capex.to.Revenue + 
+        Graham.Number + Tangible.Asset.Value + Net.Current.Asset.Value + 
+        Invested.Capital + Average.Receivables + Average.Inventory + 
+        Receivables.Turnover + Net.Income.Growth + EPS.Diluted.Growth + 
+        Free.Cash.Flow.growth + X10Y.Revenue.Growth..per.Share. + 
+        X5Y.Operating.CF.Growth..per.Share. + X10Y.Net.Income.Growth..per.Share. + 
+        X3Y.Shareholders.Equity.Growth..per.Share. + X10Y.Dividend.per.Share.Growth..per.Share. + 
+        Inventory.Growth + Asset.Growth + Book.Value.per.Share.Growth, 
+    data = Data_2018_0)
+summary(model_selected_A)
+```
+
+```{r}
+plot(model_selected_A)
+```
+
+
+```{r}
+model_selected_B = lm((((X2019.PRICE.VAR....)^lambda_B) - 1)/lambda_B ~ Revenue + 
+    Revenue.Growth + Cost.of.Revenue + Operating.Expenses + Interest.Expense + 
+    Net.Income...Non.Controlling.int + Net.Income + Net.Income.Com + 
+    Weighted.Average.Shs.Out + Weighted.Average.Shs.Out..Dil. + 
+    Dividend.per.Share + EBIT.Margin + Profit.Margin + EBITDA + 
+    EBIT + Consolidated.Income + Cash.and.cash.equivalents + 
+    Short.term.investments + Cash.and.short.term.investments + 
+    Inventories + Total.current.assets + Goodwill.and.Intangible.Assets + 
+    Total.assets + Total.current.liabilities + Long.term.debt + 
+    Deferred.revenue + Total.shareholders.equity + Investments + 
+    Net.Debt + Other.Liabilities + Depreciation...Amortization + 
+    priceBookValueRatio + ebtperEBIT + returnOnCapitalEmployed + 
+    payablesTurnover + fixedAssetTurnover + assetTurnover + currentRatio + 
+    cashRatio + daysOfSalesOutstanding + daysOfPayablesOutstanding + 
+    debtRatio + totalDebtToCapitalization + interestCoverage + 
+    companyEquityMultiplier + freeCashFlowPerShare + operatingCashFlowSalesRatio + 
+    Net.Income.per.Share + Interest.Debt.per.Share + Market.Cap + 
+    Enterprise.Value + Income.Quality + R.D.to.Revenue + Intangibles.to.Total.Assets + 
+    Capex.to.Revenue + Working.Capital + Tangible.Asset.Value + 
+    Net.Current.Asset.Value + Average.Receivables + Average.Inventory + 
+    Gross.Profit.Growth + EBIT.Growth + Operating.Income.Growth + 
+    Net.Income.Growth + EPS.Diluted.Growth + X3Y.Operating.CF.Growth..per.Share. + 
+    X5Y.Net.Income.Growth..per.Share. + X5Y.Shareholders.Equity.Growth..per.Share. + 
+    X3Y.Shareholders.Equity.Growth..per.Share. + X10Y.Dividend.per.Share.Growth..per.Share. + 
+    Book.Value.per.Share.Growth + R.D.Expense.Growth + SG.A.Expenses.Growth, 
+    data = Data_2018_1)
+summary(model_selected_B)
+```
+
+```{r}
+plot(model_selected_B)
+```
+
+Hypothesis Testing:
+```{r}
+library(car)
+```
+
+Theory1: Revenue has greater impact than long term debt
+H0 - Rev <= Long Term
+H1 - Rev > Long Term
+```{r}
+linearHypothesis(model_selected_B, "1*Revenue - 1*Long.term.debt = 0")
+```
+P value = 1-(0.10/2) = 1-0.05 = 0.95 > 0.05
+Failed to reject null hypothesis
+Theory is wrong..
+
+Theory2: EBIT margin has less effect than profit margin
+H0 - Ebit margin >= Profit Margin
+H1 - Ebit Margin < Profit Margin 
+```{r}
+linearHypothesis(model_selected_B, "1*EBIT.Margin - 1*Profit.Margin = 0")
+```
+p value = p/2 = 0.02 < 0.05
+We reject the null hypothesis
+Theory is correct
+
+Theory3: Short term debt matters more than long term debt
+H0 - Short term <= Long term
+H1 - Short term > Long term
+```{r}
+linearHypothesis(model_selected_A, "1*Short.term.debt - 1*Long.term.debt = 0")
+```
+p-value = 1-p/2 = 0.97 > 0.05
+Therefore, fail to reject null hypothesis
+Theory is wrong.
+
+
+Theory4: Short term investments have more effect than long term investments.
+H0 - Short term <= Long term.
+H1 - Short term > Long term.
+```{r}
+linearHypothesis(model_bxcx_1, "1*Short.term.investments - 1*Long.term.investments = 0")
+```
+p-value = 1-p/2 = 0.89 > 0.05
+We fail to reject Null hypothesis
+Theory is wrong
+
+
+Theory5: Trade shareholders equity affects positively
+Ho : Shareholder equity <= 0
+H1 : Share > 0
+```{r}
+linearHypothesis(model_bxcx_1, "1*Shareholders.Equity.per.Share = 0")
+```
+p-value = 1-p/2 = 0.67 > 0.05
+We fail to reject.
+Theory is wrong
+
+
+Theory6: Debt ratio affects negatively.
+Debt ratio >= 0
+Debt ratio < 0
+```{r}
+linearHypothesis(model_selected_A, "1*debtRatio = 0")
+```
+p-value = p/2 = 0.02 < 0.05
+Reject Null Hypothesis
+Theory is right.
+
+
+Theory7: R.D.Expenses + SG.A.Expense + Interest Expense + Income Tax Expense affects equally
+H0: R.D Expenses = SG.A Expense
+    R.D Expenses = Interest Expense
+    R.D Expenses = Income Tax Expense
+H1: R.D Expenses != SG.A Expense
+    R.D Expenses != Interest Expense
+    R.D Expemses != Income Tax Expense
+```{r}
+Hyp <- matrix(c(0,0,0,0,0,1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,1,0,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,1,0,0,0,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), nrow = 3, byrow = T)
+c = c(0,0,0)
+linearHypothesis(model_bxcx_1, Hyp, c)
+```
+p-value = 0.18 > 0.05
+Failed to reject Null Hypothesis
+Theory is right
+
+
+Theory8: priceBookValueRatio,	priceToBookRatio, priceToSalesRatio, priceEarningsRatio,	priceToFreeCashFlowsRatio, priceToOperatingCashFlowsRatio, priceCashFlowRatio, priceEarningsToGrowthRatio, 	priceSalesRatio do not affect.
+H0: priceBookValueRatio = 0
+    priceBookValueRatio + priceToBookRatio = 0
+    priceBookValueRatio + priceToSalesRatio = 0
+    priceBookValueRatio + priceEarningsRatio = 0
+    priceBookValueRatio + priceToFreeCashFlowsRatio = 0
+    priceBookValueRatio + priceToOperatingCashFlowsRatio = 0
+    priceBookValueRatio + priceCashFlowRatio = 0
+    priceBookValueRatio + priceEarningsToGrowthRatio = 0
+    priceBookValueRatio + priceSalesRatio = 0
+H1: priceBookValueRatio != 0
+    priceBookValueRatio + priceToBookRatio != 0
+    priceBookValueRatio + priceToSalesRatio != 0
+    priceBookValueRatio + priceEarningsRatio != 0
+    priceBookValueRatio + priceToFreeCashFlowsRatio != 0
+    priceBookValueRatio + priceToOperatingCashFlowsRatio != 0
+    priceBookValueRatio + priceCashFlowRatio != 0
+    priceBookValueRatio + priceEarningsToGrowthRatio != 0
+    priceBookValueRatio + priceSalesRatio != 0
+```{r}
+Hyp <- matrix(c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), nrow = 9, byrow = T)
+c <- c(0,0,0,0,0,0,0,0,0)
+linearHypothesis(model_bxcx_0, Hyp, c)
+```
+p-value = 0.9 > 0.05
+Failed to reject Null Hypothesis
+Theory is right
+
+
+Theory9: R.D to.Revenue affects positively
+H0: R.D.to.Revenue <= 0
+H1: R.D.to.Revenue > 0
+```{r}
+linearHypothesis(model_selected_A, "1*R.D.to.Revenue = 0")
+```
+p-value = 2.812e-05 < 0.5
+Reject H0
+Theory is correct
+
+
+Theory10: Market Cap affects less than Revenue
+H0: Market Cap >= Revenue
+H1: Market Cap < Revenue
+```{r}
+linearHypothesis(model_selected_A, "1*Market.Cap - 1*Revenue = 0")
+```
+p-value = p/2 = 0.0007 < 0.5
+Reject Null Hypothesis
+Theory is correct
+
+
+Theory11: 10Y Net Income growth per Share = 5Y Net Income growth per Share
+H0: 10Y - 5Y = 0
+H1: 10Y - 5Y != 0
+```{r}
+linearHypothesis(model_bxcx_1, "1*X10Y.Net.Income.Growth..per.Share. - 1*X5Y.Net.Income.Growth..per.Share. = 0")
+```
+p-value = 0.80 > 0.05
+Fail to reject Null Hypothesis
+Theory is correct
